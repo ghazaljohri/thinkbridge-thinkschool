@@ -35,8 +35,12 @@ than assumed from reading the code:
   `appsettings.Development.json` sets it to `http://localhost:4200`, so a
   production deploy doesn't inherit the dev server's origin unless someone
   configures it on purpose.
+- **Loading/error/empty states render, not just exist in the template.** Both
+  resource-backed views are asserted mid-flight (before the response lands,
+  status is still `loading`) and on a 500 (the `@switch`'s `'error'` case /
+  the `@else if` branch), not just on the happy path.
 
-27 Angular unit tests cover the above (`npm test`), the existing 62 .NET unit
+30 Angular unit tests cover the above (`npm test`), the existing 62 .NET unit
 tests still pass unchanged, both `ng build` and `dotnet build` are clean, and
 the full loop — login, create as two different authors, list, author summary,
 delete (403 then 204) — was run end to end against a live `dotnet run`

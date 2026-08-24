@@ -33,6 +33,23 @@ describe('AuthorsSummary', () => {
     expect(component).toBeTruthy();
   });
 
+  it('renders the loading state before the initial response, then the error state on failure', async () => {
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Loading author summaries',
+    );
+
+    httpMock
+      .expectOne('http://api.test/api/authors/summary')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Could not load author summaries.',
+    );
+  });
+
   it('renders the author summaries returned by the API', async () => {
     httpMock.expectOne('http://api.test/api/authors/summary').flush([
       { author: 'Ada Lovelace', quoteCount: 2, mostRecentQuoteText: 'Latest quote' },

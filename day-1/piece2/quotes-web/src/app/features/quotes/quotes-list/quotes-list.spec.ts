@@ -42,6 +42,31 @@ describe('QuotesList', () => {
     expect(component).toBeTruthy();
   });
 
+  it('renders the loading state before the initial response, then the error state on failure', async () => {
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Loading quotes');
+
+    httpMock
+      .expectOne((req) => req.url === 'http://api.test/api/quotes')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Could not load quotes from the API.',
+    );
+  });
+
+  it('renders the empty state once the list resolves with no items', async () => {
+    flushList([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'No quotes yet — add the first one above.',
+    );
+  });
+
   it('requests the first page on load and exposes it through the resource', async () => {
     flushList([{ id: 1, author: 'Ada Lovelace', text: 'First quote' }]);
     await fixture.whenStable();
