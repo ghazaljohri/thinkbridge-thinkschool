@@ -1,0 +1,19 @@
+<div class="app-shell">
+  <header class="app-header">
+    <nav>
+      <a routerLink="/quotes" routerLinkActive="active">Quotes</a>
+      <a routerLink="/authors" routerLinkActive="active">Authors</a>
+    </nav>
+
+    <div class="session">
+      @if (auth.email()) {
+        <span>{{ auth.email() }}</span>
+      }
+      <button type="button" (click)="logout()">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <router-outlet />
+  </main>
+</div>

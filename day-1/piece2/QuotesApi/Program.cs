@@ -183,6 +183,20 @@ builder.Services.AddOptions<JwtBearerOptions>(entraJwtScheme)
         };
     });
 
+// No origins configured by default, so production deployments stay locked down
+// unless AllowedOrigins is explicitly set (e.g. appsettings.Development.json,
+// which points this at the Angular dev server).
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? [];
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+    });
+});
+
 builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler,
     CanDeleteOwnQuoteHandler>();
 
@@ -224,6 +238,8 @@ app.UseSerilogRequestLogging(options =>
 });
 
 app.UseExceptionHandler();
+
+app.UseCors("Frontend");
 
 app.UseAuthentication();
 app.UseAuthorization();

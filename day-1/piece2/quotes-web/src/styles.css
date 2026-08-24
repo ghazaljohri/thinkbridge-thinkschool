@@ -1,0 +1,147 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f5f7;
+  color: #1f2430;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e4e9;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.error {
+  color: #b3261e;
+}
+
+.status {
+  color: #5b6270;
+}
+
+.hint {
+  color: #5b6270;
+  font-size: 0.85rem;
+}
+
+.login-card {
+  max-width: 320px;
+  margin: 4rem auto;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+input,
+button {
+  font: inherit;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #c7cad1;
+}
+
+button {
+  cursor: pointer;
+  background: #4b3fd6;
+  color: #fff;
+  border: none;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.quotes-page,
+.authors-page {
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.create-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.create-form input {
+  flex: 1;
+}
+
+.quotes,
+.authors {
+  list-style: none;
+  padding: 0;
+}
+
+.quote-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+}
+
+.app-shell .app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  background: #fff;
+  border-bottom: 1px solid #e2e4e9;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.app-header a {
+  color: #5b6270;
+  text-decoration: none;
+}
+
+.app-header a.active {
+  color: #4b3fd6;
+  font-weight: 600;
+}
+
+.app-header .session {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.app-header .session button {
+  background: transparent;
+  color: #4b3fd6;
+  border: 1px solid #4b3fd6;
+}
