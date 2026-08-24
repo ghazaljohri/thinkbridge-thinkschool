@@ -77,6 +77,53 @@ describe('QuotesList', () => {
     expect(component.totalPages()).toBe(1);
   });
 
+  it('recomputes rangeLabel from page and pageSize independently of each other and of the resource', async () => {
+    flushList([]);
+    await fixture.whenStable();
+    expect(component.rangeLabel()).toBe('1–5');
+
+    // Changing page alone shifts the range without touching pageSize.
+    component.page.set(3);
+    expect(component.rangeLabel()).toBe('11–15');
+    expect(component.pageSize()).toBe(5);
+
+    // Changing pageSize alone shifts the range without touching page.
+    component.pageSize.set(10);
+    expect(component.rangeLabel()).toBe('21–30');
+    expect(component.page()).toBe(3);
+
+    // Both signals compose correctly together.
+    component.page.set(1);
+    expect(component.rangeLabel()).toBe('1–10');
+
+    // The pending request from the page/size churn above is never consumed
+    // by an assertion - drain it so verify() doesn't flag it as unflushed.
+    httpMock.match(() => true).forEach((req) => req.flush({ page: 1, size: 10, total: 0, items: [] }));
+  });
+
+  it('setPageSize resets to page 1 and triggers a fresh request at the new size', async () => {
+    flushList([{ id: 1, author: 'Ada Lovelace', text: 'First quote' }], 12);
+    await fixture.whenStable();
+    component.goToPage(2);
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.params.get('page') === '2')
+      .flush({ page: 2, size: 5, total: 12, items: [] });
+    await fixture.whenStable();
+
+    component.setPageSize(10);
+    fixture.detectChanges();
+
+    const req = httpMock.expectOne(
+      (r) => r.params.get('page') === '1' && r.params.get('size') === '10',
+    );
+    req.flush({ page: 1, size: 10, total: 12, items: [] });
+    await fixture.whenStable();
+
+    expect(component.page()).toBe(1);
+    expect(component.pageSize()).toBe(10);
+  });
+
   it('re-requests when the page signal changes', async () => {
     flushList([{ id: 1, author: 'Ada Lovelace', text: 'First quote' }], 12);
     await fixture.whenStable();

@@ -33,6 +33,14 @@ export class QuotesList {
     return result ? Math.max(1, Math.ceil(result.total / result.size)) : 1;
   });
 
+  // Derived from page() and pageSize() alone - no need to wait on the
+  // resource's response to know what range of rows we asked the API for.
+  readonly rangeLabel = computed(() => {
+    const start = (this.page() - 1) * this.pageSize() + 1;
+    const end = this.page() * this.pageSize();
+    return `${start}–${end}`;
+  });
+
   readonly newAuthor = signal('');
   readonly newText = signal('');
   readonly isCreating = signal(false);
@@ -44,6 +52,11 @@ export class QuotesList {
   goToPage(target: number): void {
     if (target < 1 || target > this.totalPages()) return;
     this.page.set(target);
+  }
+
+  setPageSize(size: number): void {
+    this.pageSize.set(size);
+    this.page.set(1);
   }
 
   async createQuote(): Promise<void> {
