@@ -25,6 +25,11 @@ export const routes: Routes = [
             (m) => m.AuthorsSummary,
           ),
       },
+      {
+        path: 'browse',
+        loadComponent: () =>
+          import('./features/quotes-explorer/quotes-explorer').then((m) => m.QuotesExplorer),
+      },
     ],
   },
   { path: '**', redirectTo: 'quotes' },

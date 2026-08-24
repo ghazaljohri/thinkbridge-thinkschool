@@ -1,0 +1,47 @@
+<section class="explorer">
+  <h1>Browse quotes</h1>
+
+  <div class="explorer-layout">
+    <div class="explorer-list card">
+      @if (quotes.listLoading()) {
+        <p class="status">Loading quotes…</p>
+      } @else if (quotes.listError()) {
+        <p class="error">{{ quotes.listError() }}</p>
+      } @else if (quotes.list().length === 0) {
+        <p>No quotes yet.</p>
+      } @else {
+        <ul>
+          @for (quote of quotes.list(); track quote.id) {
+            <li>
+              <button
+                type="button"
+                class="quote-row"
+                [class.selected]="selectedId() === quote.id"
+                (click)="select(quote.id)"
+              >
+                <strong>{{ quote.author }}</strong>
+                <span>{{ quote.text }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    <div class="explorer-detail card">
+      @if (selectedId() === null) {
+        <p>Select a quote to see its detail.</p>
+      } @else if (quotes.detailLoading()) {
+        <p class="status">Loading detail…</p>
+      } @else if (quotes.detailError()) {
+        <p class="error">{{ quotes.detailError() }}</p>
+      } @else if (quotes.detail()) {
+        <blockquote>{{ quotes.detail()!.text }}</blockquote>
+        <p>— {{ quotes.detail()!.author }}</p>
+        <p class="hint">Added {{ quotes.detail()!.createdAtUtc }}</p>
+      } @else {
+        <p class="error">Something went wrong loading that quote.</p>
+      }
+    </div>
+  </div>
+</section>
