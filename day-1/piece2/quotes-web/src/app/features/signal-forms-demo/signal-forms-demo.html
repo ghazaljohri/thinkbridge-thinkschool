@@ -1,0 +1,14 @@
+<section class="quotes-page">
+  <h1>Signal Forms preview</h1>
+  <p class="hint">
+    Same create-a-quote form, same real POST /api/quotes contract, rebuilt with
+    <code>@angular/forms/signals</code> instead of <code>ReactiveFormsModule</code>. See
+    <code>quotes-web/WHY.md</code> for the comparison against the reactive-forms version.
+  </p>
+
+  <app-create-quote-form-signal (created)="onCreated($event)" />
+
+  @if (lastCreated()) {
+    <p class="status" role="status">Last created: "{{ lastCreated()!.text }}" — {{ lastCreated()!.author }}</p>
+  }
+</section>

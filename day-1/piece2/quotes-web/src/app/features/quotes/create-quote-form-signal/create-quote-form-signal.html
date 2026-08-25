@@ -1,0 +1,48 @@
+<form class="card create-quote-form" (submit)="$event.preventDefault(); submitForm()" novalidate>
+  <h2>Add a quote (Signal Forms preview)</h2>
+
+  <div class="field">
+    <label for="author-sf">Author</label>
+    <input
+      id="author-sf"
+      type="text"
+      [formField]="quoteForm.author"
+      [attr.aria-invalid]="fieldError(quoteForm.author) ? 'true' : null"
+      [attr.aria-describedby]="describedBy(quoteForm.author, 'author')"
+    />
+    <p id="author-hint" class="hint">Up to {{ authorMaxLength }} characters.</p>
+    @if (fieldError(quoteForm.author)) {
+      <p id="author-error" class="error" role="alert">{{ fieldError(quoteForm.author) }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="text-sf">Quote text</label>
+    <textarea
+      id="text-sf"
+      rows="3"
+      [formField]="quoteForm.text"
+      [attr.aria-invalid]="fieldError(quoteForm.text) ? 'true' : null"
+      [attr.aria-describedby]="describedBy(quoteForm.text, 'text')"
+    ></textarea>
+    <p id="text-hint" class="hint">Up to {{ textMaxLength }} characters.</p>
+    @if (fieldError(quoteForm.text)) {
+      <p id="text-error" class="error" role="alert">{{ fieldError(quoteForm.text) }}</p>
+    }
+  </div>
+
+  @if (serverError()) {
+    <p class="error" role="alert">{{ serverError() }}</p>
+  }
+  @if (successMessage()) {
+    <p class="status" role="status">{{ successMessage() }}</p>
+  }
+
+  <button
+    type="submit"
+    [disabled]="quoteForm().submitting()"
+    [attr.aria-busy]="quoteForm().submitting() ? 'true' : null"
+  >
+    {{ quoteForm().submitting() ? 'Adding…' : 'Add quote' }}
+  </button>
+</form>

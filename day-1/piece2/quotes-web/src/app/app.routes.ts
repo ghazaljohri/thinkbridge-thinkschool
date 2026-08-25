@@ -30,6 +30,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/quotes-explorer/quotes-explorer').then((m) => m.QuotesExplorer),
       },
+      {
+        path: 'signal-forms',
+        loadComponent: () =>
+          import('./features/signal-forms-demo/signal-forms-demo').then((m) => m.SignalFormsDemo),
+      },
     ],
   },
   { path: '**', redirectTo: 'quotes' },

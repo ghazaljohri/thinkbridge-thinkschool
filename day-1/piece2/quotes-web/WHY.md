@@ -235,3 +235,130 @@ attributes (`aria-invalid`, `aria-describedby`, `document.activeElement`)
 in jsdom, and against the live API via curl for the actual validation
 contract - not with a real screen reader or axe run in a browser, since no
 browser tool was available this session.
+
+# Day 14 — Signal Forms preview, same form rebuilt
+
+`create-quote-form-signal/` rebuilds the exact same form against the exact
+same contract (`POST /api/quotes`, `{author, text}`, same 200/1000 limits
+read off `Quote.Create`) using `@angular/forms/signals` - Angular's preview
+signal-based forms API, shipped in this project's installed `@angular/forms`
+22.1.3 - instead of `ReactiveFormsModule`. It's wired in at `/signal-forms`
+("Signal Forms" in the nav) alongside the reactive version rather than
+replacing it, since the point here is the comparison, not a rewrite. Before
+writing a line of it, I read the actual shipped source in
+`node_modules/@angular/forms/fesm2022/signals.mjs` and
+`_validation_errors-chunk.mjs` for `required()`, `submit()`, and the
+`formField` directive - not the guide docs, the code that actually runs -
+because a preview API is exactly where "the docs said X" and "the code does
+X" are most likely to have drifted.
+
+## States and edges exercised
+
+Same list as the reactive-forms version, run against this rebuild:
+pristine/untouched (no `aria-invalid`, nothing with `role="alert"`),
+dirty-vs-touched as two independently observable signals, validators firing
+(required and the real 200-char `maxLength` boundary), a blocked submit
+that touches every field and focuses the first invalid one, a clean submit
+that posts exactly `{author, text}` and resets the model, and both
+server-error shapes - a 401 banner that leaves the typed values alone, and
+a real 400 `ValidationProblem` mapped onto the specific field with focus
+moved to it. All of it re-verified against the live API the same way as the
+reactive version (see the curl output further up this file - same endpoint,
+same 400/401/201 responses either way).
+
+## The bug I caught here too
+
+`required()` has the *exact same* whitespace gap `Validators.required` has
+in the reactive-forms version, and I confirmed it by reading
+`@angular/forms/signals`' own `isEmpty()`:
+
+```js
+function isEmpty(value) {
+  if (typeof value === 'number') return isNaN(value);
+  return value === '' || value === false || value == null;
+}
+```
+
+`value === ''` only - no trim. So a first draft using plain `required(path.author)`
+lets `"   "` through client-side for the identical reason
+`Validators.required` did, and the real API rejects it identically (confirmed
+live: `author: "   "` still 400s with the same `errors.author` message).
+I proved this the same way as the reactive version: swapped to plain
+`required()`, ran the whitespace test, watched it fail
+(`quoteForm.author().invalid()` came back `false` for `"   "`), then
+replaced it with a custom `validate(path.author, ctx => ctx.value().trim().length === 0 ? requiredError() : undefined)`
+on both fields and reran to confirm it passes. Same underlying API contract
+mismatch, same fix shape, different forms library - which is itself the
+finding: switching form libraries doesn't validate your fields for you: you
+still have to know what the API actually requires.
+
+## A second real gap, found by testing rather than assumed
+
+Writing the `dirty` test surfaced something not obvious from the docs:
+`field().value` is a plain `WritableSignal`, and the guide text for it
+("updating this signal will update the data model") doesn't mention that
+calling `.value.set(...)` directly skips dirty-tracking entirely. Reading
+`_validation_errors-chunk.mjs`'s `controlValueSignal()` confirmed why:
+`markAsDirty()` is only called inside the *wrapped* `controlValue.set()`
+that the actual bound `<input>` writes through, not inside `value`'s own
+setter. My test originally asserted `field().value.set('Ada')` would mark
+the field dirty - it didn't, so the test was wrong, not the library. Fixed
+the test to drive the real DOM element (`input.dispatchEvent(new
+Event('input'))`) instead, which does mark it dirty, and left the finding
+in the test as a comment rather than deleting the evidence that it took a
+failing assertion to notice.
+
+## Where Signal Forms is actually simpler
+
+- **Focus management needs no `ElementRef`.** The reactive-forms version
+  needed `viewChild<ElementRef>('authorInput')` plus a template ref
+  variable just to call `.nativeElement.focus()`. Here,
+  `quoteForm.author().focusBoundControl()` does the same thing directly off
+  the field state - no template plumbing.
+- **Submitting state is built in.** `quoteForm().submitting()` is already a
+  signal on the field tree, set around the submit action automatically. The
+  reactive-forms version needed its own separate `submitting` signal set and
+  cleared by hand around the `try`/`finally`.
+- **Server errors merge into `.errors()` for free.** Returning
+  `{kind, message, fieldTree}` objects from the submit action lands them in
+  that field's `errors()` signal automatically (confirmed in the source:
+  `submissionErrors` is concatenated into the same `errors` computation that
+  backs validator errors), and it's a `linkedSignal` keyed off the field's
+  value, so editing the field clears it automatically too. The reactive
+  version does this by hand with `control.setErrors({server: message})` and
+  relies on Angular re-running validators on the next edit to drop it.
+- **No `ReactiveFormsModule`/`FormsModule` import at all** - just
+  `imports: [FormField]`, one directive, for the whole form.
+
+## Where it's still rough
+
+- **No a11y wiring for free, at all.** I checked - there is no `aria-`
+  string anywhere in the compiled `@angular/forms/signals` package. Every
+  `aria-invalid`/`aria-describedby` binding in the template here is exactly
+  as manual as the reactive-forms version's. If I'd assumed the newer API
+  handled this because it manages so much else automatically, that
+  assumption would have been wrong and the form would have shipped
+  inaccessible - this is the "over-claim of parity" the exercise warns
+  about, and the honest answer is there's no parity here at all, in either
+  direction: reactive forms doesn't give you this either.
+- **`submit()`'s boolean return conflates two different failures.** It
+  resolves `false` when a field is genuinely invalid, but `true` when the
+  action ran and simply returned no *field* errors - which is also what
+  happens on a 401, since there's no field to blame for "you're logged
+  out." That's not wrong, but it means you can't use the return value alone
+  to know "did this succeed," and I had to keep a separate `serverError`
+  signal for exactly the same reason the reactive-forms version needed one.
+- **The whitespace-validator gap above** - a preview API inheriting the
+  exact same rough edge as a stable one.
+- **Bundle size, measured, not guessed:** the `/signal-forms` route's lazy
+  chunk is 43.76 kB raw (12.12 kB transferred) for one form, versus 8.33 kB
+  raw (2.82 kB transferred) for the entire reactive-forms `quotes-list`
+  route, which includes a form, a paginated list, and delete. That's from
+  `ng build`'s own output, not an estimate.
+- **It's still a preview.** The package ships under the stable
+  `@angular/forms` version here, but the API surface (`required`,
+  `schema`, `submit`, `FormField`) is explicitly marked `@publicApi 22.0`/
+  `22.1` in its own type declarations with no deprecation path documented
+  yet either way - it's new enough that reading the shipped source instead
+  of trusting a blog post's description of it was the only way to get any
+  of the above right.
