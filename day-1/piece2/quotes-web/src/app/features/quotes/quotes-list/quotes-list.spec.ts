@@ -152,39 +152,29 @@ describe('QuotesList', () => {
     expect(component.page()).toBe(1);
   });
 
-  it('rejects an empty create form without calling the API', async () => {
-    flushList([]);
+  // Create-form validation/submission behavior (empty form, whitespace
+  // author, a11y wiring, server errors) lives in create-quote-form.spec.ts,
+  // against the CreateQuoteForm component embedded below. This only checks
+  // that QuotesList reacts correctly to its (created) output.
+  it('resets to page 1 and reloads the list when the create form reports a new quote', async () => {
+    flushList([{ id: 1, author: 'Ada Lovelace', text: 'First quote' }], 12);
     await fixture.whenStable();
 
-    await component.createQuote();
-
-    expect(component.formError()).toBe('Author and text are both required.');
-    httpMock.expectNone((req) => req.method === 'POST');
-  });
-
-  it('creates a quote, resets the form, and reloads the list', async () => {
-    flushList([]);
+    component.goToPage(2);
+    fixture.detectChanges();
+    httpMock
+      .expectOne((r) => r.params.get('page') === '2')
+      .flush({ page: 2, size: 5, total: 12, items: [] });
     await fixture.whenStable();
 
-    component.newAuthor.set('Ada Lovelace');
-    component.newText.set('A new quote');
-    const createPromise = component.createQuote();
-
-    const postReq = httpMock.expectOne(
-      (r) => r.url === 'http://api.test/api/quotes' && r.method === 'POST',
-    );
-    expect(postReq.request.body).toEqual({ author: 'Ada Lovelace', text: 'A new quote' });
-    postReq.flush({ id: 2, author: 'Ada Lovelace', text: 'A new quote' });
-    await createPromise;
+    component.onQuoteCreated();
     fixture.detectChanges();
 
-    expect(component.newAuthor()).toBe('');
-    expect(component.newText()).toBe('');
-
-    flushList([{ id: 2, author: 'Ada Lovelace', text: 'A new quote' }]);
+    const req = httpMock.expectOne((r) => r.params.get('page') === '1');
+    req.flush({ page: 1, size: 5, total: 13, items: [{ id: 2, author: 'Ada Lovelace', text: 'New' }] });
     await fixture.whenStable();
 
-    expect(component.formError()).toBeNull();
+    expect(component.page()).toBe(1);
   });
 
   it('surfaces a 403 as an ownership error without touching the list', async () => {

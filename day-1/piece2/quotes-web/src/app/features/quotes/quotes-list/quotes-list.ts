@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { API_BASE_URL } from '../../../core/api-base-url';
 import { Auth } from '../../../core/auth';
+import { CreateQuoteForm } from '../create-quote-form/create-quote-form';
 import type { PagedResult } from '../../../models/paged-result';
 import type { Quote } from '../../../models/quote';
 
 @Component({
   selector: 'app-quotes-list',
-  imports: [FormsModule],
+  imports: [CreateQuoteForm, FormsModule],
   templateUrl: './quotes-list.html',
   styleUrl: './quotes-list.css',
 })
@@ -41,11 +42,6 @@ export class QuotesList {
     return `${start}–${end}`;
   });
 
-  readonly newAuthor = signal('');
-  readonly newText = signal('');
-  readonly isCreating = signal(false);
-  readonly formError = signal<string | null>(null);
-
   readonly pendingDeleteId = signal<number | null>(null);
   readonly deleteError = signal<string | null>(null);
 
@@ -59,37 +55,9 @@ export class QuotesList {
     this.page.set(1);
   }
 
-  async createQuote(): Promise<void> {
-    this.formError.set(null);
-
-    if (!this.newAuthor().trim() || !this.newText().trim()) {
-      this.formError.set('Author and text are both required.');
-      return;
-    }
-
-    this.isCreating.set(true);
-
-    try {
-      await firstValueFrom(
-        this.http.post(`${this.baseUrl}/api/quotes`, {
-          author: this.newAuthor(),
-          text: this.newText(),
-        }),
-      );
-
-      this.newAuthor.set('');
-      this.newText.set('');
-      this.page.set(1);
-      this.quotesResource.reload();
-    } catch (error) {
-      this.formError.set(
-        error instanceof HttpErrorResponse && error.status === 401
-          ? 'You need to sign in again to add a quote.'
-          : 'Could not create that quote.',
-      );
-    } finally {
-      this.isCreating.set(false);
-    }
+  onQuoteCreated(): void {
+    this.page.set(1);
+    this.quotesResource.reload();
   }
 
   // can-delete-own-quote only succeeds when the caller's email matches the

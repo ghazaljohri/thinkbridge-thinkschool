@@ -1,0 +1,46 @@
+<form class="card create-quote-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  <h2>Add a quote</h2>
+
+  <div class="field">
+    <label for="author">Author</label>
+    <input
+      id="author"
+      type="text"
+      formControlName="author"
+      #authorInput
+      [attr.aria-invalid]="fieldError('author') ? 'true' : null"
+      [attr.aria-describedby]="describedBy('author')"
+    />
+    <p id="author-hint" class="hint">Up to {{ authorMaxLength }} characters.</p>
+    @if (fieldError('author')) {
+      <p id="author-error" class="error" role="alert">{{ fieldError('author') }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label for="text">Quote text</label>
+    <textarea
+      id="text"
+      rows="3"
+      formControlName="text"
+      #textInput
+      [attr.aria-invalid]="fieldError('text') ? 'true' : null"
+      [attr.aria-describedby]="describedBy('text')"
+    ></textarea>
+    <p id="text-hint" class="hint">Up to {{ textMaxLength }} characters.</p>
+    @if (fieldError('text')) {
+      <p id="text-error" class="error" role="alert">{{ fieldError('text') }}</p>
+    }
+  </div>
+
+  @if (serverError()) {
+    <p class="error" role="alert">{{ serverError() }}</p>
+  }
+  @if (successMessage()) {
+    <p class="status" role="status">{{ successMessage() }}</p>
+  }
+
+  <button type="submit" [disabled]="submitting()" [attr.aria-busy]="submitting() ? 'true' : null">
+    {{ submitting() ? 'Adding…' : 'Add quote' }}
+  </button>
+</form>

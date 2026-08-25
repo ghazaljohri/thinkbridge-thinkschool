@@ -1,27 +1,8 @@
 <section class="quotes-page">
   <h1>Quotes</h1>
 
-  <form class="card create-form" (ngSubmit)="createQuote()">
-    <input
-      name="author"
-      placeholder="Author"
-      [ngModel]="newAuthor()"
-      (ngModelChange)="newAuthor.set($event)"
-    />
-    <input
-      name="text"
-      placeholder="Quote text"
-      [ngModel]="newText()"
-      (ngModelChange)="newText.set($event)"
-    />
-    <button type="submit" [disabled]="isCreating()">
-      {{ isCreating() ? 'Adding…' : 'Add quote' }}
-    </button>
-  </form>
+  <app-create-quote-form (created)="onQuoteCreated()" />
 
-  @if (formError()) {
-    <p class="error">{{ formError() }}</p>
-  }
   @if (deleteError()) {
     <p class="error">{{ deleteError() }}</p>
   }

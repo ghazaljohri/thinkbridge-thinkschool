@@ -133,3 +133,105 @@ rendering a generic error instead of going blank. It's still worth listing
 here, because a naked `200` with a null body is exactly the kind of contract
 drift that's easy to leave unhandled if nobody deliberately exercises it
 against the real endpoint the way the curl check above did.
+
+# Day 14 — Reactive form + accessibility, verification note
+
+`create-quote-form/` replaces the old ad hoc `ngModel` inputs in
+`quotes-list.ts` with an actual reactive form (`FormGroup`/`FormControl`)
+against the real `POST /api/quotes` contract. The brief I gave myself before
+building it: hold `author` and `text` as controls, validate them to the same
+limits the API itself enforces (not a guessed number), wire proper labels
+and `aria-invalid`/`aria-describedby`, move focus to the first invalid field
+on submit, and handle loading/server-error states without inventing a field
+the API doesn't have.
+
+Before writing any client validation, I hit the real API directly to find
+out what its actual rules are, instead of assuming:
+
+```
+POST /api/quotes  { author: "   ", text: "Some real text" }
+→ 400 { errors: { author: ["Author is required. (Parameter 'author')"] } }
+
+POST /api/quotes  { author: "A"*201, text: "hi" }
+→ 400 { errors: { author: ["Author must be 200 characters or fewer. ..."] } }
+
+POST /api/quotes  (no Authorization header)
+→ 401, empty body
+```
+
+That's `QuotesApi/Models/Quote.cs`'s `Quote.Create`: `author`/`text` both
+required via `string.IsNullOrWhiteSpace`, capped at 200 and 1000 characters
+respectively - so `Validators.maxLength(200)`/`Validators.maxLength(1000)`
+on the two controls, not a round number picked because it looked reasonable.
+
+## The bug I actually caught
+
+First draft used `Validators.required` for both fields. I wrote the test
+suite before checking anything by hand, and one test - typing `"   "` into
+the author field and expecting the form to be invalid - failed against that
+draft: `Validators.required` only fails on an *exactly* empty string, so
+three spaces sail through client-side validation and the form reports
+itself as submittable. The real API disagrees, as the curl output above
+shows - it uses `IsNullOrWhiteSpace`, which a plain "is it non-empty" check
+doesn't reproduce. Fixed it with a small custom validator
+(`requiredNonBlank`) that trims before checking, matching the server rule
+exactly, then reran the same test to confirm it now fails the way the real
+API would. This wasn't a hypothetical either - I ran the exact whitespace
+payload against the live API first (see the curl output above) before
+writing the validator, so the fix is grounded in what the server actually
+does, not in what I assumed it does.
+
+Once that was proven client-side, I still didn't drop the server-response
+handling to only "it worked or it didn't" - a genuine 400 `ValidationProblem`
+(confirmed live, exact shape above) now maps onto the specific control
+(`setErrors({ server: message })`) and refocuses it, rather than a generic
+banner the user can't act on. This matters beyond nice-to-have: if the
+API's own rules ever drift from what's encoded in the client validators,
+a real field-level error still lands on the right field instead of vanishing
+into "something went wrong."
+
+## States and edges exercised
+
+- Empty/untouched: no `aria-invalid`, no error text, confirmed by querying
+  for `[role="alert"]` and finding nothing.
+- Invalid on submit: submitting an empty form marks both controls touched,
+  sets `aria-invalid="true"` and `aria-describedby="author-error
+  author-hint"` on the author input, and moves focus to it -
+  `document.activeElement` is asserted directly, not assumed from reading
+  the template.
+- Over the real length limit: setting author to 201 characters produces
+  the same "too long" state a 200-character API limit would actually
+  trigger, and the message reports the real numbers (`201/200`), not a
+  static string.
+- The whitespace-only bug above.
+- Submitting: the button disables and gets `aria-busy="true"` while the
+  request is in flight, confirmed while the mocked request is still
+  pending, not after it resolves.
+- Success: posts exactly `{author, text}` (no extra invented fields),
+  resets the form, and emits the created quote for `QuotesList` to react to.
+- Server error, unauthenticated: a 401 shows a real "sign in again" message
+  and leaves the entered values in place - it doesn't relabel a server
+  failure as if the form itself were invalid.
+- Server error, field-level 400: mapped onto the specific control as shown
+  above, with focus moved to it.
+
+## What breaks if the contract changes
+
+If `Quote.Create`'s limits change (say, `Text` grows to 2000 characters),
+the client validator becomes stricter than the server for no reason - users
+get blocked on the client for something the API would actually accept. The
+two numbers only agree because I checked them against the real model, not
+because they're derived from a shared source; a contract change means
+`AUTHOR_MAX_LENGTH`/`TEXT_MAX_LENGTH` need a matching edit, and nothing
+here would flag that they'd drifted apart. If the 400 error shape ever
+changed key casing (e.g. `Author` instead of `author`), `applyServerFieldErrors`
+would silently find no matching field and fall through to the generic
+"could not create" banner - the request would still fail loudly, just
+without pointing at the specific field, which is a worse but not silent
+failure.
+
+One honest limitation: this was verified with unit tests asserting real DOM
+attributes (`aria-invalid`, `aria-describedby`, `document.activeElement`)
+in jsdom, and against the live API via curl for the actual validation
+contract - not with a real screen reader or axe run in a browser, since no
+browser tool was available this session.

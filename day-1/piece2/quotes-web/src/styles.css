@@ -80,6 +80,42 @@ button:disabled {
   padding: 0 1rem;
 }
 
+.create-quote-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.create-quote-form h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field input,
+.field textarea {
+  font: inherit;
+}
+
+.field [aria-invalid='true'] {
+  border-color: #b3261e;
+}
+
+.field .hint {
+  margin: 0;
+  color: #5b6270;
+  font-size: 0.8rem;
+}
+
+.field .error {
+  margin: 0;
+}
+
 .explorer-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
