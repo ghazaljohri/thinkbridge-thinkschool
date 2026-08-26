@@ -362,3 +362,148 @@ failing assertion to notice.
   yet either way - it's new enough that reading the shipped source instead
   of trusting a blog post's description of it was the only way to get any
   of the above right.
+
+# Day 15 — HttpClient + interceptors, verification note
+
+The order here was deliberate and matches the exercise: pin the real
+contract with a characterization test first, green before any interceptor
+code exists, then build the interceptors against what that test actually
+found - not against what a REST API "usually" looks like.
+
+## The characterization test (`contract/quotes-api.characterization.test.mjs`)
+
+This is plain Node (`node:test` + `fetch`), not an Angular/Vitest spec - it
+makes real network calls against a real running `QuotesApi`, deliberately
+outside `HttpTestingController`'s mocking, because the whole point is
+pinning what the server actually does, not what a mock says it does. Run
+with `npm run test:contract` while the API is running. It passed cleanly on
+the first real run and again just now as a final check before writing this
+note - 4/4, against `GET /api/quotes?page=1&size=5` and the same endpoint
+with an invalid page.
+
+What it pinned, all confirmed live, not assumed:
+
+- The real paged shape: `{page, size, total, items}`, each item
+  `{id, author, text, isDeleted, createdAtUtc}` - exact field names, exact
+  types.
+- A 400 from that same GET endpoint (`page=0`) really is a
+  `ValidationProblemDetails`: `application/problem+json`,
+  `{type, title, status, errors, traceId}`. `errors` includes **every**
+  field key, even ones with no problem (`size: []` here) - not just the
+  field that actually failed.
+- **The finding that mattered most for the interceptor design:** 401
+  (unauthenticated DELETE) and 404 (missing quote) both come back with a
+  **completely empty body** - `Content-Length: 0`, no JSON at all. Only the
+  400 validation path returns a body in this API. An error mapper built on
+  the assumption that "a 4xx has a ProblemDetails body" - a completely
+  reasonable assumption for a REST API in general - would be wrong for two
+  out of three of the 4xx cases this app actually has to handle, and would
+  either throw parsing nothing or silently show "undefined" in the UI. This
+  is exactly the kind of thing a characterization test is for: it turned a
+  plausible-sounding assumption into a checked fact before any code that
+  depended on it got written.
+
+## What got built on top of it
+
+- `core/http/app-error.ts` - a typed `AppError` (`status`, `title`,
+  `message`, `fieldErrors`) and a pure `toAppError(HttpErrorResponse)`
+  mapper. Every fixture in its test file is the literal body captured by
+  the characterization test, not invented JSON. 401/403/404 go through a
+  fixed per-status fallback message specifically because there's no body to
+  read one from; 400 with an `errors` dict gets real field-level messages,
+  filtering out the empty-array fields the API always includes.
+- `core/http/retry-interceptor.ts` - retries GETs only, only on a transient
+  failure (network error or 5xx), with exponential backoff, never on a 4xx.
+- `core/http/error-mapping-interceptor.ts` - converts `HttpErrorResponse`
+  to `AppError`, but **only for requests that opt in** via an
+  `HttpContext` token (`MAP_ERRORS`), not globally.
+- Wired together in `app.config.ts` as
+  `withInterceptors([errorMappingInterceptor, authInterceptor, retryInterceptor])`,
+  and `core/quotes.ts` (`loadList`/`loadDetail`, from Day 13) now opts into
+  it and uses `AppError.message` directly instead of its previous
+  hand-rolled `error.status === 404 ? ... : ...` check.
+
+## Be ready to defend: the interceptor order
+
+`withInterceptors([errorMappingInterceptor, authInterceptor, retryInterceptor])` -
+first in the array is outermost for the request, and by the same token the
+**last** to see the response/error on the way back (Angular's interceptors
+unwind in reverse). That ordering is load-bearing, not arbitrary:
+
+- `retryInterceptor` has to be **closest to the backend** so it sees the
+  *raw* transient failure and can retry before anything else touches it.
+- `authInterceptor` sits in the middle so it sees a genuine raw 401 (to
+  decide whether to refresh the token) rather than something already
+  rewritten into an `AppError`, which wouldn't carry a `.status` property
+  `authInterceptor`'s own `instanceof HttpErrorResponse` check depends on.
+- `errorMappingInterceptor` is **outermost** so it only converts whatever
+  survives both of the above - the final, real failure - not an
+  intermediate state mid-retry or mid-refresh.
+
+I didn't just assert this ordering works - `core/http/http-pipeline.spec.ts`
+composes all three in this exact order (not each interceptor tested alone)
+and proves: the bearer token still gets attached and a 401 still triggers a
+refresh-and-retry with error-mapping and retry both present in the chain;
+a transient 500 on a GET still gets retried with auth and error-mapping
+ahead of it; and a request that opts into `MAP_ERRORS` still gets a real
+`AppError` even when it took a failed-refresh detour through `authInterceptor`
+first. Getting this order backwards is exactly the kind of thing that looks
+fine in each interceptor's own isolated unit tests and only breaks when
+they're actually composed - which is why that file exists.
+
+## Be ready to defend: why error-mapping is opt-in, not global
+
+The obvious simpler design is to make `errorMappingInterceptor` unconditional
+so every request gets an `AppError`. I didn't do that, on purpose: this app
+already has three real, shipped, tested call sites from Day 13/14
+(`auth-interceptor.ts`, `auth.ts`, `create-quote-form.ts`) that catch errors
+with `error instanceof HttpErrorResponse` and read `.status` off them
+directly. Making error-mapping global would silently change what type every
+one of those `catch` blocks receives, breaking working, reviewed code for a
+Day 15 change that has no reason to touch it. The `HttpContext`-token opt-in
+(`MAP_ERRORS`) means new code (`core/quotes.ts`'s `loadList`/`loadDetail`)
+can use `AppError` deliberately while nothing else changes behavior.
+
+## Verification: RxJS's own contract for `retry()`'s delay function
+
+The one place I checked documentation before writing code, specifically
+because getting it wrong would fail silently: `retry({count, delay})`'s
+`delay` callback needs to *return an errored Observable* to stop retrying
+and propagate that error - not throw synchronously. `retry.d.ts`'s own
+comment says so directly: "If the notifier completes without emitting, the
+resulting observable will complete without error; if the notifier errors,
+the error will be pushed to the result." A synchronous throw isn't
+mentioned as part of that contract at all. Returning `EMPTY` instead of
+`throwError(() => error)` for a non-transient error would have made a 4xx
+on a GET **complete silently with no error and no value** instead of
+failing - the kind of bug that wouldn't show up in a quick manual check,
+only in a test that actually asserts what the rejected promise contains,
+which is what `retry-interceptor.spec.ts`'s "does not retry a 4xx" test
+does.
+
+## States and edges exercised
+
+Transient-failure retry-then-succeed, transient failure exhausting all
+retries and rethrowing the real error, a 4xx never retried at all, a
+non-GET never retried even on a 500 (POST/DELETE aren't idempotent - a
+duplicate quote from a retried create would be a worse bug than a failed
+one), the opt-in boundary itself (same 404, mapped for one request and left
+as a plain `HttpErrorResponse` for another), and the full composed chain
+under both a successful-refresh and a failed-refresh 401.
+
+## What breaks if the contract changes
+
+If a future endpoint starts returning a real ProblemDetails body on 401/403/404
+instead of an empty one, nothing breaks - `toAppError` already has a generic
+ProblemDetails fallback for exactly that shape, it just wouldn't be reached
+today since the fallback map catches those statuses first. If the
+`errors` dict's key casing changed (e.g. `Page` instead of `page`), field
+errors would stop attaching to specific controls in the create-quote form
+and the generic `body.title` message would show instead - a real regression,
+not a crash, and one the characterization test would catch on its next run
+since it asserts the literal message text, not just the presence of a body.
+If `GET /api/quotes` ever became non-idempotent (it can't, but hypothetically
+paired with a side effect), the retry interceptor would need to move past a
+blanket `req.method === 'GET'` check - today that's a safe assumption
+because it's true of this API, not because GET is inherently always safe to
+retry everywhere.

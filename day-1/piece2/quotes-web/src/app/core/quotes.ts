@@ -1,8 +1,11 @@
 import { Service, inject, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { API_BASE_URL } from './api-base-url';
+import { MAP_ERRORS, type AppError } from './http/app-error';
 import type { PagedResult } from '../models/paged-result';
 import type { Quote } from '../models/quote';
+
+const MAPPED = new HttpContext().set(MAP_ERRORS, true);
 
 @Service()
 export class Quotes {
@@ -37,17 +40,25 @@ export class Quotes {
     this._listLoading.set(true);
     this._listError.set(null);
 
+    // Both GETs below opt into MAP_ERRORS (context: MAPPED), so `error` in
+    // the error callback is a typed AppError, not a raw HttpErrorResponse -
+    // see core/http/app-error.ts. They also get the global retry
+    // interceptor's transient-failure retry for free, since that one
+    // applies to every GET, not just opted-in ones.
     this.http
-      .get<PagedResult<Quote>>(`${this.baseUrl}/api/quotes`, { params: { page, size } })
+      .get<PagedResult<Quote>>(`${this.baseUrl}/api/quotes`, {
+        params: { page, size },
+        context: MAPPED,
+      })
       .subscribe({
         next: (result) => {
           if (requestId !== this.listRequestId) return;
           this._list.set(result.items);
           this._listLoading.set(false);
         },
-        error: () => {
+        error: (error: AppError) => {
           if (requestId !== this.listRequestId) return;
-          this._listError.set('Could not load the quotes list.');
+          this._listError.set(error.message);
           this._listLoading.set(false);
         },
       });
@@ -59,17 +70,15 @@ export class Quotes {
     this._detailLoading.set(true);
     this._detailError.set(null);
 
-    this.http.get<Quote>(`${this.baseUrl}/api/quotes/${id}`).subscribe({
+    this.http.get<Quote>(`${this.baseUrl}/api/quotes/${id}`, { context: MAPPED }).subscribe({
       next: (quote) => {
         if (requestId !== this.detailRequestId) return;
         this._detail.set(quote);
         this._detailLoading.set(false);
       },
-      error: (error: HttpErrorResponse) => {
+      error: (error: AppError) => {
         if (requestId !== this.detailRequestId) return;
-        this._detailError.set(
-          error.status === 404 ? 'That quote no longer exists.' : 'Could not load that quote.',
-        );
+        this._detailError.set(error.message);
         this._detailLoading.set(false);
       },
     });

@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { QuotesExplorer } from './quotes-explorer';
 import { API_BASE_URL } from '../../core/api-base-url';
+import { errorMappingInterceptor } from '../../core/http/error-mapping-interceptor';
 
 describe('QuotesExplorer', () => {
   let fixture: ComponentFixture<QuotesExplorer>;
@@ -13,7 +14,7 @@ describe('QuotesExplorer', () => {
     await TestBed.configureTestingModule({
       imports: [QuotesExplorer],
       providers: [
-        provideHttpClient(),
+        provideHttpClient(withInterceptors([errorMappingInterceptor])),
         provideHttpClientTesting(),
         { provide: API_BASE_URL, useValue: 'http://api.test' },
       ],
@@ -101,5 +102,27 @@ describe('QuotesExplorer', () => {
 
     expect(detailText()).toContain('Grace Hopper');
     expect(detailText()).not.toContain('Ada Lovelace');
+  });
+
+  it('shows a friendly message, not a raw error, when a selected quote 404s', async () => {
+    flushList([{ id: 1, author: 'Ada Lovelace', text: 'Q1' }]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    component.select(1);
+    fixture.detectChanges();
+
+    // Confirmed live: a missing quote returns 404 with an EMPTY body - no
+    // JSON to read a message off, which is exactly why the app error
+    // mapper's per-status fallback text matters here.
+    httpMock
+      .expectOne('http://api.test/api/quotes/1')
+      .flush(null, { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const detailText =
+      (fixture.nativeElement as HTMLElement).querySelector('.explorer-detail')?.textContent ?? '';
+    expect(detailText).toContain('That could not be found.');
   });
 });

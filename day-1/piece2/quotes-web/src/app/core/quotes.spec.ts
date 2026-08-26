@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Quotes } from './quotes';
 import { API_BASE_URL } from './api-base-url';
+import { errorMappingInterceptor } from './http/error-mapping-interceptor';
 
 describe('Quotes', () => {
   let service: Quotes;
@@ -11,7 +12,10 @@ describe('Quotes', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
-        provideHttpClient(),
+        // Quotes opts its GETs into MAP_ERRORS, so the interceptor needs to
+        // actually be registered here for `error` in its subscribe() calls
+        // to really be an AppError, the same as it is wired in app.config.ts.
+        provideHttpClient(withInterceptors([errorMappingInterceptor])),
         provideHttpClientTesting(),
         { provide: API_BASE_URL, useValue: 'http://api.test' },
       ],
@@ -40,17 +44,38 @@ describe('Quotes', () => {
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
 
     expect(service.listLoading()).toBe(false);
-    expect(service.listError()).not.toBeNull();
+    expect(service.listError()).toBe('Something went wrong on our end. Please try again shortly.');
   });
 
-  it('surfaces a 404 on detail as a real error, not a stuck spinner', () => {
+  it('surfaces the real ValidationProblemDetails 400 on a bad page/size, not a generic message', () => {
+    // The exact shape confirmed live against the real endpoint in
+    // contract/quotes-api.characterization.test.mjs.
+    service.loadList(0, 20);
+    httpMock.expectOne((r) => r.url === 'http://api.test/api/quotes').flush(
+      {
+        type: 'https://tools.ietf.org/html/rfc9110#section-15.5.1',
+        title: 'One or more validation errors occurred.',
+        status: 400,
+        errors: { page: ['Page must be at least 1.'], size: [] },
+        traceId: '00-abc',
+      },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(service.listError()).toBe('Please fix the highlighted fields.');
+  });
+
+  it('surfaces a 404 on detail via the fallback AppError message, not a stuck spinner', () => {
+    // Confirmed live: GET /api/quotes/{id} for a missing id returns 404
+    // with an EMPTY body, so this has to come from the status-code
+    // fallback, not from reading a body that isn't there.
     service.loadDetail(999);
     httpMock
       .expectOne('http://api.test/api/quotes/999')
       .flush(null, { status: 404, statusText: 'Not Found' });
 
     expect(service.detailLoading()).toBe(false);
-    expect(service.detailError()).toBe('That quote no longer exists.');
+    expect(service.detailError()).toBe('That could not be found.');
   });
 
   it('does not let a slow, stale detail response overwrite a newer selection', () => {
