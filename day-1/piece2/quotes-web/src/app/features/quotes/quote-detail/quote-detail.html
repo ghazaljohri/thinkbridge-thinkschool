@@ -1,0 +1,17 @@
+<section class="quotes-page">
+  <a routerLink="/quotes" class="back-link">← Back to quotes</a>
+
+  @if (quotes.detailLoading()) {
+    <p class="status">Loading quote…</p>
+  } @else if (quotes.detailError()) {
+    <p class="error">{{ quotes.detailError() }}</p>
+  } @else if (quotes.detail(); as quote) {
+    <div class="card" [style.view-transition-name]="'quote-' + quote.id">
+      <blockquote>{{ quote.text }}</blockquote>
+      <p>— {{ quote.author }}</p>
+      <p class="hint">Added {{ quote.createdAtUtc }}</p>
+    </div>
+  } @else {
+    <p class="error">That's not a valid quote id.</p>
+  }
+</section>

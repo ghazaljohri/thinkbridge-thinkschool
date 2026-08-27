@@ -21,10 +21,11 @@
       @if ((quotesResource.value()?.items?.length ?? 0) > 0) {
         <ul class="quotes">
           @for (quote of quotesResource.value()!.items; track quote.id) {
-            <li class="card">
+            <li class="card" [style.view-transition-name]="'quote-' + quote.id">
               <blockquote>{{ quote.text }}</blockquote>
               <div class="quote-meta">
                 <span>— {{ quote.author }}</span>
+                <a [routerLink]="['/quotes', quote.id]">View</a>
                 <button
                   type="button"
                   [disabled]="pendingDeleteId() === quote.id"

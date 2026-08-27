@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter } from '@angular/router';
 import { QuotesList } from './quotes-list';
 import { API_BASE_URL } from '../../../core/api-base-url';
 
@@ -15,6 +16,7 @@ describe('QuotesList', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: API_BASE_URL, useValue: 'http://api.test' },
       ],
     }).compileComponents();
@@ -75,6 +77,15 @@ describe('QuotesList', () => {
       { id: 1, author: 'Ada Lovelace', text: 'First quote' },
     ]);
     expect(component.totalPages()).toBe(1);
+  });
+
+  it('links each quote to its real routed detail page by id', async () => {
+    flushList([{ id: 7, author: 'Ada Lovelace', text: 'First quote' }]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const viewLink = (fixture.nativeElement as HTMLElement).querySelector('a')!;
+    expect(viewLink.getAttribute('href')).toBe('/quotes/7');
   });
 
   it('recomputes rangeLabel from page and pageSize independently of each other and of the resource', async () => {

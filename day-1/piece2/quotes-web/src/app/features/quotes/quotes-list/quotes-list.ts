@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, httpResource } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { API_BASE_URL } from '../../../core/api-base-url';
 import { Auth } from '../../../core/auth';
@@ -10,7 +11,7 @@ import type { Quote } from '../../../models/quote';
 
 @Component({
   selector: 'app-quotes-list',
-  imports: [CreateQuoteForm, FormsModule],
+  imports: [CreateQuoteForm, FormsModule, RouterLink],
   templateUrl: './quotes-list.html',
   styleUrl: './quotes-list.css',
 })

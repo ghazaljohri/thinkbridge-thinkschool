@@ -19,6 +19,16 @@ export const routes: Routes = [
           import('./features/quotes/quotes-list/quotes-list').then((m) => m.QuotesList),
       },
       {
+        // The real route param: GET /api/quotes/{id:int}'s id. A separate
+        // lazy chunk from 'quotes' above - confirmed in the build output,
+        // not assumed - and protected by the same authGuard on the parent
+        // route, which Angular re-evaluates for every segment on any
+        // navigation, including a direct deep link straight to this URL.
+        path: 'quotes/:id',
+        loadComponent: () =>
+          import('./features/quotes/quote-detail/quote-detail').then((m) => m.QuoteDetail),
+      },
+      {
         path: 'authors',
         loadComponent: () =>
           import('./features/authors/authors-summary/authors-summary').then(

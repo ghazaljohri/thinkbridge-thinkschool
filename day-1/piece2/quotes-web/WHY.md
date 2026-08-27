@@ -507,3 +507,94 @@ paired with a side effect), the retry interceptor would need to move past a
 blanket `req.method === 'GET'` check - today that's a safe assumption
 because it's true of this API, not because GET is inherently always safe to
 retry everywhere.
+
+# Day 16 — Routing, lazy loading, guards, verification note
+
+`features/quotes/quote-detail/` is a real routed page - `/quotes/:id` -
+against `GET /api/quotes/{id:int}`, the same endpoint `core/quotes.ts`
+already talked to from the non-routed `QuotesExplorer` master-detail view
+(Day 13). The brief: lazy-loaded, guarded by the existing `authGuard`, the
+route param bound to the real `id` field the API returns, and a View
+Transition between the quotes list and this detail page - not four separate
+half-built things, one path through the app that uses all four.
+
+## What's real here, checked, not asserted
+
+- **Lazy-loaded.** `ng build`'s own output is the proof, not a claim:
+  `quote-detail` shows up as its own chunk (1.54 kB / 768 bytes transferred),
+  separate from `main` and from `quotes-list`. If it weren't code-split, it
+  would be sitting inside `main.js` and there would be no separate chunk to
+  point at.
+- **The guard actually redirects an unauthenticated deep link.** Not by
+  re-testing `authGuard` in isolation again (already covered from Day 13) -
+  `app-routing.spec.ts` drives the *actual* `routes` array from
+  `app.routes.ts` through `RouterTestingHarness.create('/quotes/5')` with no
+  session in `localStorage`, and asserts `router.url === '/login'` plus that
+  no HTTP request to the detail endpoint was ever made. `/quotes/:id` has no
+  `canActivate` of its own - it inherits the parent `Shell` route's guard,
+  and this test is what actually confirms Angular re-evaluates that parent
+  guard for a direct deep link into a nested child, not just for the parent
+  path itself, rather than taking that on faith.
+- **The real route param, bound the modern way.** `withComponentInputBinding()`
+  in `app.config.ts` binds `:id` straight to `QuoteDetail`'s `id` input
+  signal - no `ActivatedRoute.paramMap` subscription. `quote-detail.spec.ts`
+  sets that input directly and asserts the resulting request goes to
+  `/api/quotes/5`, i.e. the exact real field name and endpoint shape, not a
+  mock of some generic "detail" concept.
+- **A View Transition, not just the router feature flag flipped on.**
+  `withViewTransitions()` wraps navigation in `document.startViewTransition()`
+  (a no-op where unsupported). The quote card in `quotes-list.html` and the
+  card in `quote-detail.html` share the same `view-transition-name`
+  (`'quote-' + id`) - the same element identity across both routes, so the
+  browser morphs the clicked card into the detail view instead of a hard
+  cut or a generic page-level crossfade. No browser tool was available this
+  session to watch the transition itself animate, which is a real
+  limitation worth stating plainly rather than claiming a visual check that
+  didn't happen - what's actually verified is the DOM wiring that makes it
+  possible (matching names, real route activation) and that the app boots
+  and serves the deep link correctly under `ng serve`.
+
+## The bug I caught reviewing this before calling it done
+
+The first version of `quote-detail.html` had three states -
+`detailLoading()`, `detailError()`, `detail()` - as an `@if`/`@else if`
+chain with no final `@else`. That's the *exact* shape of bug fixed on
+Day 13 in a different component (a 200-with-null-body falling through every
+branch and rendering nothing), and I still nearly repeated it here: a
+non-numeric `:id` in the URL (`/quotes/not-a-number`) means `Number.isInteger`
+never passes, `loadDetail()` is never called, and none of the three
+branches match - a blank page under the back link, no error, no
+explanation. Caught it while reading my own diff before writing the test,
+not after a failure, and added a final `@else` plus a
+`quote-detail.spec.ts` test that types a garbage id and asserts the actual
+message renders instead of nothing. Worth logging as the concrete catch
+because it's the second time this exact class of bug showed up in this
+codebase - which says the lesson is "always write the terminal `@else`
+before considering a state chain done," not "this one component had a bug."
+
+Two smaller ones caught by just running the suite, not by inspection:
+`quotes-list.spec.ts` broke the moment `RouterLink` was added to that
+component's imports, because its test module never provided `provideRouter([])` -
+a real, mechanical consequence of adding routing to a component whose test
+predates routing being wired up anywhere in the app. And the first
+`app-routing.spec.ts` draft tried to assert
+`harness.routeDebugElement?.componentInstance instanceof QuoteDetail` -
+wrong, because that debug element belongs to `Shell` (the outer routed
+component under the harness's synthetic root), not the nested child inside
+Shell's own `<router-outlet>`. Fixed by asserting on the resolved URL and
+the presence of `app-quote-detail` in the rendered DOM plus the actual
+dispatched request instead of guessing at the debug-element tree's shape.
+
+## What breaks if the contract changes
+
+If `GET /api/quotes/{id:int}` ever became a `string` id instead of an
+`int` (a GUID, say), `Number.isInteger(Number(this.id()))` would reject
+every real id and the page would show "That's not a valid quote id." for
+every quote - a loud, visible failure, not a silent one, but a real
+behavior change nonetheless since the current guard assumes numeric ids
+specifically because that's what `{id:int}` in the real route constraint
+promises today. If the detail endpoint were ever nested under a different
+path (`/api/quotes/{id}/full`, say), only `core/quotes.ts`'s `loadDetail()`
+needs to change - `QuoteDetail` itself doesn't know the URL shape, only the
+service does, which is exactly the point of keeping that URL construction
+in one place rather than duplicating it per consumer.
