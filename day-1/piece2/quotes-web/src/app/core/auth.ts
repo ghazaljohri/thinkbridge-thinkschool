@@ -25,12 +25,29 @@ function readStoredSession(): StoredSession | null {
   }
 }
 
-function decodeEmail(accessToken: string): string | null {
+interface TokenClaims {
+  readonly email: string | null;
+  readonly userId: number | null;
+}
+
+const EMPTY_CLAIMS: TokenClaims = { email: null, userId: null };
+
+function decodeClaims(accessToken: string): TokenClaims {
   try {
     const payload = JSON.parse(atob(accessToken.split('.')[1]));
-    return (payload.email as string | undefined) ?? null;
+    // JwtTokenService.CreateAccessToken sets `sub` to the real
+    // QuotesApi.Models.Auth.User.Id (an int, stringified per the JWT spec's
+    // sub claim being a string) - this is the same id Collection.OwnerId
+    // and CollectionSummary/CollectionDetail's ownerId field mean.
+    const sub = payload.sub as string | undefined;
+    const userId = sub !== undefined ? Number(sub) : NaN;
+
+    return {
+      email: (payload.email as string | undefined) ?? null,
+      userId: Number.isInteger(userId) ? userId : null,
+    };
   } catch {
-    return null;
+    return EMPTY_CLAIMS;
   }
 }
 
@@ -46,10 +63,14 @@ export class Auth {
 
   readonly accessToken = computed(() => this.session()?.accessToken ?? null);
   readonly isAuthenticated = computed(() => this.accessToken() !== null);
-  readonly email = computed(() => {
+
+  private readonly claims = computed<TokenClaims>(() => {
     const token = this.accessToken();
-    return token ? decodeEmail(token) : null;
+    return token ? decodeClaims(token) : EMPTY_CLAIMS;
   });
+
+  readonly email = computed(() => this.claims().email);
+  readonly userId = computed(() => this.claims().userId);
 
   constructor() {
     // Keeps the session in sync with localStorage so a page refresh doesn't

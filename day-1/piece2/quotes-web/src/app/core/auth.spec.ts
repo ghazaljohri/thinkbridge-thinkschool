@@ -50,6 +50,30 @@ describe('Auth', () => {
     expect(JSON.parse(localStorage.getItem('quotes-web.session')!).accessToken).toBe(fakeToken);
   });
 
+  it('decodes the real sub claim as userId - the same id Collection.OwnerId means', async () => {
+    // JwtTokenService.CreateAccessToken sets sub to user.Id.ToString() -
+    // a real, stringified int, not a GUID or an opaque subject identifier.
+    const fakeToken = `header.${btoa(JSON.stringify({ email: 'test@example.com', sub: '1' }))}.signature`;
+    const loginPromise = service.login('test@example.com', 'Password123!');
+    httpMock
+      .expectOne('http://api.test/api/auth/login')
+      .flush({ access_token: fakeToken, refresh_token: 'refresh-token', expires_in: 1800 });
+    await loginPromise;
+
+    expect(service.userId()).toBe(1);
+  });
+
+  it('falls back to a null userId rather than NaN when sub is missing or malformed', async () => {
+    const fakeToken = `header.${btoa(JSON.stringify({ email: 'test@example.com' }))}.signature`;
+    const loginPromise = service.login('test@example.com', 'Password123!');
+    httpMock
+      .expectOne('http://api.test/api/auth/login')
+      .flush({ access_token: fakeToken, refresh_token: 'refresh-token', expires_in: 1800 });
+    await loginPromise;
+
+    expect(service.userId()).toBeNull();
+  });
+
   it('clears the session on logout', async () => {
     const fakeToken = `header.${btoa(JSON.stringify({ email: 'test@example.com' }))}.signature`;
     const loginPromise = service.login('test@example.com', 'Password123!');

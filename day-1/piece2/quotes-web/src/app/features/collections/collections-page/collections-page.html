@@ -1,0 +1,80 @@
+<section class="quotes-page">
+  <h1>My Collections</h1>
+
+  <form class="card create-form" (ngSubmit)="createCollection()">
+    <input
+      name="name"
+      placeholder="Collection name"
+      [ngModel]="newName()"
+      (ngModelChange)="newName.set($event)"
+    />
+    <button type="submit" [disabled]="collections.creating()">
+      {{ collections.creating() ? 'Creating…' : 'Create' }}
+    </button>
+  </form>
+  @if (collections.createError()) {
+    <p class="error">{{ collections.createError() }}</p>
+  }
+
+  @if (collections.summariesLoading()) {
+    <p class="status">Loading collections…</p>
+  } @else if (collections.summariesError()) {
+    <p class="error">{{ collections.summariesError() }}</p>
+  } @else if (collections.summaries().length === 0) {
+    <p>No collections yet — create one above.</p>
+  } @else {
+    <ul class="quotes">
+      @for (summary of collections.summaries(); track summary.id) {
+        <li class="card">
+          <button type="button" (click)="select(summary.id)">
+            {{ summary.name }} ({{ summary.itemCount }})
+          </button>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (selectedId() !== null) {
+    <div class="card">
+      @if (collections.detailLoading()) {
+        <p class="status">Loading collection…</p>
+      } @else if (collections.detailError()) {
+        <p class="error">{{ collections.detailError() }}</p>
+      } @else if (collections.detail(); as detail) {
+        <h2>{{ detail.name }}</h2>
+
+        <form class="create-form" (ngSubmit)="addItem()">
+          <input
+            name="quoteId"
+            placeholder="Quote id"
+            [ngModel]="newQuoteId()"
+            (ngModelChange)="newQuoteId.set($event)"
+          />
+          <button type="submit">Add</button>
+        </form>
+        @if (collections.itemError()) {
+          <p class="error">{{ collections.itemError() }}</p>
+        }
+
+        @if (detail.items.length === 0) {
+          <p>No quotes in this collection yet.</p>
+        } @else {
+          <ul>
+            @for (item of detail.items; track item.quoteId) {
+              <li class="quote-meta">
+                <span>{{ item.text }} — {{ item.author }}</span>
+                <button
+                  type="button"
+                  [disabled]="collections.mutatingItemId() === item.quoteId"
+                  (click)="removeItem(item.quoteId)"
+                >
+                  {{ collections.mutatingItemId() === item.quoteId ? 'Removing…' : 'Remove' }}
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      }
+    </div>
+  }
+</section>

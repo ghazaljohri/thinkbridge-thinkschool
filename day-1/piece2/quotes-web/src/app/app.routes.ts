@@ -45,6 +45,13 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/signal-forms-demo/signal-forms-demo').then((m) => m.SignalFormsDemo),
       },
+      {
+        path: 'collections',
+        loadComponent: () =>
+          import('./features/collections/collections-page/collections-page').then(
+            (m) => m.CollectionsPage,
+          ),
+      },
     ],
   },
   { path: '**', redirectTo: 'quotes' },

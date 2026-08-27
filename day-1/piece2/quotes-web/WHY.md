@@ -598,3 +598,135 @@ path (`/api/quotes/{id}/full`, say), only `core/quotes.ts`'s `loadDetail()`
 needs to change - `QuoteDetail` itself doesn't know the URL shape, only the
 service does, which is exactly the point of keeping that URL construction
 in one place rather than duplicating it per consumer.
+
+# Day 16 — State management, signals first, verification note
+
+`core/collections.ts` is a new small feature - "my collections" - against
+real endpoints the frontend hadn't touched before this: `GET
+/api/collections?ownerId=N` (returns `CollectionSummary[]`,
+`{id, name, ownerId, itemCount, lastAddedAt}`), `GET /api/collections/{id}`
+(`{id, name, ownerId, items: [{quoteId, author, text, addedAt}]}`), `POST
+/api/collections` (`{name, ownerId}`), and `POST`/`DELETE
+/api/collections/{id}/items[/{quoteId}]`. Same pattern as `core/quotes.ts`
+(Day 13/15): a service, plain `signal()`s, no store. `Auth.userId()` (new -
+decodes the JWT's real `sub` claim, confirmed live to be the actual
+`QuotesApi.Models.Auth.User.Id`, the same int `Collection.OwnerId` means)
+supplies the real `ownerId` instead of a hardcoded or prompted-for value.
+
+## A real discovered API quirk that shaped the whole design
+
+Before writing the service, I checked what the write endpoints actually do
+on a bad input, the same way earlier days checked what a 4xx actually looks
+like. `Collection`'s own constructor and `AddItem`/`RemoveItem`
+(`QuotesApi/Models/Collections/Collection.cs`) throw plain
+`ArgumentException`/`InvalidOperationException` for a too-short name, a
+duplicate item, an item that isn't there, or the 50-item cap - and unlike
+`QuoteEndpointExtensions`, nothing in `CollectionEndpointExtensions` catches
+any of them. Confirmed live:
+
+```
+POST /api/collections {"name":"ab","ownerId":1}
+→ 500 {"title":"An unexpected error occurred.", ...}
+
+POST /api/collections/1/items {"quoteId":1}  (already in the collection)
+→ 500 {"title":"An unexpected error occurred.", ...}   <- identical body
+```
+
+A bad name, a duplicate add, and an actual server bug all produce the exact
+same generic 500. There is no way to tell them apart from the HTTP response
+alone. That's the concrete reason `Collections.createCollection()` and
+`.addItem()` mirror `Collection`'s own validation rules (name length 3-80,
+no duplicate item, the 50-item cap) client-side, checked *before* ever
+calling the API - not as a nice-to-have, but because it's the only way this
+feature can show an accurate message for those specific, foreseeable
+cases. `collections.spec.ts` proves the short-circuit actually happens
+(`httpMock.expectNone(...)` after triggering each one) rather than just
+asserting the error message shows up.
+
+## The bug caught by actually running the tests
+
+`addItem()`/`removeItem()` both call `await this.loadDetail(id)` after the
+mutation succeeds, to refresh the item list. My first test for this flushed
+the add/remove request and then immediately tried to intercept the reload
+`GET` in the same synchronous block - and it wasn't there yet. Same root
+cause as a bug from Day 15's retry-interceptor tests: an `async`
+function's continuation after an `await` runs as a microtask, not
+synchronously inside whatever triggered the resolution. Fixed the same way
+- an `await new Promise(resolve => setTimeout(resolve, 0))` between the
+flush and the next expected request - and left the comment explaining why,
+since this is clearly a recurring shape of mistake in this codebase's
+tests, not a one-off.
+
+## States and edges exercised
+
+Loading/error/empty for both summaries and detail, a create blocked
+client-side for a bad name (no network call at all), a create blocked
+server-side by a genuine 500 for a name that passes the client check
+(the fallback path still has to work), adding a duplicate item and a
+51st item both blocked client-side against the *actual loaded detail* for
+that specific collection (not a hardcoded assumption), and the full
+add-then-reload and remove-then-reload cycles through the real request
+shapes. The page itself derives its `ownerId` from the session and reloads
+summaries only when the signed-in user actually changes, not on every
+render - proven by `userId()` being a `computed()`, so a token refresh for
+the same user doesn't re-fire the effect at all.
+
+## The judgment call: when this stops being "just signals + a service"
+
+This is mine, not the agent's - the agent can draft the pattern, but
+deciding where the line sits is a judgment call about a system I have to
+stand behind. My rule, in my own words:
+
+**Stay with signals + a plain service as long as (1) each piece of state
+has exactly one service that owns writing to it, (2) "derived state" can
+be expressed as a `computed()` in a few lines without reaching into another
+feature's service to do it, and (3) nothing needs to reactively coordinate
+across feature boundaries in real time.** `Collections` and `Quotes` today
+both satisfy this: `Collections` reads `Auth.userId()` once, on init, to
+know whose collections to load - that's a one-way read, not a subscription
+two services both need to react to changes in. Neither one needs to know
+the other's internal state to do its own job.
+
+**I'd reach for a store the moment any of those three stop being true** -
+concretely, for this app: if a "quote detail" page needed to show whether
+that quote is already in *any* of the user's collections (which items live
+in `Collections`, but the query originates from a `Quotes` component) -
+that's cross-feature derived state, and duplicating a fetch-and-filter
+against `Collections.summaries()`/`.detail()` inside `Quotes` (or vice
+versa) is exactly the kind of thing that starts as "just call the other
+service" and quietly turns into three or four components each reaching
+into two services and reconciling loading/error state by hand. Same trigger
+if collection membership needed to update optimistically the instant a
+quote is deleted elsewhere in the app (an actual cross-service invariant to
+maintain, not just a read), or if the number of features doing this kind
+of cross-referencing grew past two or three, since that's when "which
+service is the source of truth for this specific piece of UI state" stops
+having an obvious answer from reading the code once.
+
+**What I would *not* treat as the threshold:** number of signals in one
+service (`Collections` already has eight and is still simple to read
+top-to-bottom, because they're all one flat, unrelated-to-each-other set of
+concerns - summaries, detail, create, item-mutation - not because eight is
+some safe number). Nor "the state got more complex" in the abstract - the
+client-side mirroring of `Collection`'s validation rules above is real
+complexity, but it's complexity that lives entirely inside one service
+and doesn't touch any other feature's state, so it doesn't move the needle
+on this decision at all. The threshold is about *coordination surface
+across services*, not line count or feature count in isolation.
+
+## What breaks if the contract changes
+
+If `CollectionEndpointExtensions` ever started catching its own
+`ArgumentException`/`InvalidOperationException` and returning real 400s
+with field-level detail (arguably the actual bug here, though fixing the
+API wasn't in scope for this exercise), nothing in the frontend would
+break - the client-side checks would just become redundant with better
+server-side ones, and `AppError`'s existing `ValidationProblemDetails`
+branch would pick up the real message for free. The riskier direction: if
+`Collection.AddItem`'s cap or duplicate rule ever changed server-side
+without a matching edit here, the two would silently disagree - the client
+would block (or allow) something the server no longer agrees with, and
+since both currently return the same generic 500 either way, that drift
+would be invisible until someone actually hit it, which is the real cost
+of mirroring a rule that isn't published anywhere machine-checkable.
+in one place rather than duplicating it per consumer.
