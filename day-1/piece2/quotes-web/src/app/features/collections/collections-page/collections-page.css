@@ -1,0 +1,48 @@
+.create-form {
+  margin-bottom: 1rem;
+}
+
+.collection-list li.card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.collection-list .btn-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: none;
+  border-radius: 0;
+  padding: 0.85rem 1.1rem;
+}
+
+.collection-list li.card.selected {
+  border-color: var(--color-primary-soft-strong);
+}
+
+.collection-list li.card.selected .btn-block {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+}
+
+.collection-name {
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.collection-list li.card.selected .badge {
+  background: var(--color-surface);
+  color: var(--color-primary-dark);
+}

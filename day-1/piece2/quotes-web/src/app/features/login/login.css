@@ -1,0 +1,48 @@
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 15% 10%, var(--color-primary-soft) 0%, transparent 45%),
+    var(--color-bg);
+  padding: 1.5rem;
+}
+
+.login-card {
+  margin: 0;
+  width: 100%;
+  padding: 2rem 2.25rem;
+  box-shadow: var(--shadow-md);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.auth-brand .mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.login-card h1 {
+  margin-bottom: 1.5rem;
+}
+
+.login-card .hint {
+  margin-top: 1.25rem;
+  justify-content: center;
+  text-align: center;
+}

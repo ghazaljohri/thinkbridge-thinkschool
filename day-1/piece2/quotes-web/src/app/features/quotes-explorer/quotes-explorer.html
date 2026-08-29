@@ -8,7 +8,7 @@
       } @else if (quotes.listError()) {
         <p class="error">{{ quotes.listError() }}</p>
       } @else if (quotes.list().length === 0) {
-        <p>No quotes yet.</p>
+        <p class="empty-state">No quotes yet.</p>
       } @else {
         <ul>
           @for (quote of quotes.list(); track quote.id) {
@@ -30,7 +30,7 @@
 
     <div class="explorer-detail card">
       @if (selectedId() === null) {
-        <p>Select a quote to see its detail.</p>
+        <p class="empty-state">Select a quote to see its detail.</p>
       } @else if (quotes.detailLoading()) {
         <p class="status">Loading detail…</p>
       } @else if (quotes.detailError()) {

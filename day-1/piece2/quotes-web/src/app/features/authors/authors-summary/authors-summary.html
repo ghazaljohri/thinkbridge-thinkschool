@@ -6,7 +6,7 @@
   } @else if (summaryResource.error()) {
     <p class="error">Could not load author summaries.</p>
   } @else if (summaryResource.value().length === 0) {
-    <p>No authors yet.</p>
+    <p class="empty-state">No authors yet.</p>
   } @else {
     <ul class="authors">
       @for (summary of summaryResource.value(); track summary.author) {

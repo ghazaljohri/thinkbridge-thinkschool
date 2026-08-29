@@ -9,6 +9,8 @@ import { routes } from './app.routes';
 import { authInterceptor } from './core/auth-interceptor';
 import { errorMappingInterceptor } from './core/http/error-mapping-interceptor';
 import { retryInterceptor } from './core/http/retry-interceptor';
+import { API_BASE_URL } from './core/api-base-url';
+import { environment } from '../environments/environment';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -33,5 +35,6 @@ export const appConfig: ApplicationConfig = {
     // refresh, before errorMapping gets the final say and converts
     // whatever's left into an AppError (only for requests that opted in).
     provideHttpClient(withInterceptors([errorMappingInterceptor, authInterceptor, retryInterceptor])),
+    { provide: API_BASE_URL, useValue: environment.apiBaseUrl },
   ],
 };
