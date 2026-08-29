@@ -1,0 +1,58 @@
+name: Deploy quotes-web to Azure Static Web Apps
+
+on:
+  push:
+    branches:
+      - day3-entra-auth
+      - main
+    paths:
+      - 'day-1/piece2/quotes-web/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'day-1/piece2/quotes-web/**'
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: day-1/piece2/quotes-web/package-lock.json
+
+      - name: Install
+        working-directory: day-1/piece2/quotes-web
+        run: npm ci
+
+      - name: Test
+        working-directory: day-1/piece2/quotes-web
+        run: npx ng test
+
+      - name: Build
+        working-directory: day-1/piece2/quotes-web
+        run: npx ng build --configuration production
+
+      # Deploy step needs the Static Web Apps deployment token, obtained once
+      # with `az staticwebapp secrets list -n swa-quotesweb-thinkschool -g
+      # rg-thinkschool-dev-shared --query properties.apiKey -o tsv` and stored
+      # as the repo secret AZURE_STATIC_WEB_APPS_API_TOKEN - never as a plain
+      # value in this file.
+      - name: Deploy to Azure Static Web Apps
+        if: github.event_name == 'push'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: 'day-1/piece2/quotes-web/dist/quotes-web/browser'
+          skip_app_build: true
+          output_location: ''
