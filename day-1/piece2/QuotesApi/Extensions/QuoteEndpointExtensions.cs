@@ -2,6 +2,7 @@ using QuotesApi.Models;
 using Microsoft.AspNetCore.Authorization;
 using QuotesApi.Repositories;
 using QuotesApi.Services;
+using QuotesApi.Services.BackgroundTasks;
 
 namespace QuotesApi.Extensions;
 
@@ -47,6 +48,7 @@ public static class QuoteEndpointExtensions
             QuoteRequest request,
             IQuoteRepository repository,
             IClock clock,
+            IBackgroundTaskQueue backgroundTaskQueue,
             ILogger<Program> logger,
             CancellationToken cancellationToken) =>
         {
@@ -65,6 +67,17 @@ public static class QuoteEndpointExtensions
                     "Created quote {QuoteId} by {Author}",
                     created.Id,
                     created.Author);
+
+                // Stands in for a real slow, non-critical side effect (an
+                // outbound webhook, a search-index update) - queued rather
+                // than awaited so the response below doesn't wait on it.
+                await backgroundTaskQueue.QueueBackgroundWorkItemAsync(async workCancellationToken =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), workCancellationToken);
+                    logger.LogInformation(
+                        "Notified subscribers of new quote {QuoteId}",
+                        created.Id);
+                });
 
                 return Results.Created(
                     $"/api/quotes/{created.Id}",

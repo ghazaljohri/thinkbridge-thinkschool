@@ -1,4 +1,5 @@
 using QuotesApi.Services;
+using QuotesApi.Services.BackgroundTasks;
 using Microsoft.EntityFrameworkCore;
 using QuotesApi.Data;
 using QuotesApi.Queries;
@@ -23,6 +24,13 @@ public static class InfrastructureExtensions
         services.AddScoped<ICollectionQueries, CollectionQueries>();
 
         services.AddSingleton<IClock, SystemClock>();
+
+        // Capacity of 100: enough to absorb a burst without an endpoint
+        // blocking on QueueBackgroundWorkItemAsync under normal load, small
+        // enough that a stuck worker fails loudly (callers start waiting on
+        // BoundedChannelFullMode.Wait) instead of memory growing unbounded.
+        services.AddSingleton<IBackgroundTaskQueue>(_ => new BackgroundTaskQueue(capacity: 100));
+        services.AddHostedService<QueuedHostedService>();
 
         return services;
     }
